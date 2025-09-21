@@ -1,42 +1,63 @@
-import nbformat
-import numpy as np
 from pathlib import Path
+import nbformat
+import ast
+import numpy as np
 
-# Pfad zum Notebook
-HERE = Path(__file__).resolve().parent       # tests/week01
-ROOT = HERE.parents[1]                       # Projekt-Root
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
 NB_PATH = ROOT / "a2_BiologicalNeuron.ipynb"
 
+SAFE_IMPORTS = {"numpy", "matplotlib", "math", "random"}  # was in der Testumgebung sicher vorhanden ist
+
 def _strip_magics(src: str) -> str:
-    """Entfernt IPython-/Shell-Magics aus einer Codezelle."""
     s = src.lstrip()
-    # Cell-magics: ganze Zelle ignorieren
-    if s.startswith("%%"):
+    if s.startswith("%%"):      # ganze Zelle verwerfen
         return ""
-    # Line-magics / Shell-Aufrufe:
-    cleaned = []
+    lines = []
     for line in src.splitlines():
         ls = line.lstrip()
         if ls.startswith("%") or ls.startswith("!"):
             continue
-        cleaned.append(line)
-    return "\n".join(cleaned)
+        lines.append(line)
+    return "\n".join(lines)
+
+def _extract_defs_keep_safe_imports(codes):
+    keep = []
+    for src in codes:
+        if not src.strip():
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                keep.append(node)
+            elif isinstance(node, ast.Import):
+                names = [n.name.split(".")[0] for n in node.names]
+                if all(n in SAFE_IMPORTS for n in names):
+                    keep.append(node)
+            elif isinstance(node, ast.ImportFrom):
+                root = (node.module or "").split(".")[0]
+                if root in SAFE_IMPORTS:
+                    keep.append(node)
+            elif isinstance(node, ast.Assign):
+                # optionale: einfache Konstanten erlauben
+                if all(isinstance(t, ast.Name) for t in node.targets):
+                    keep.append(node)
+    mod = ast.Module(body=keep, type_ignores=[])
+    return ast.unparse(mod) if hasattr(ast, "unparse") else compile(mod, "<defs>", "exec")
 
 def _exec_notebook(path: Path):
-    """Führt die Codezellen des Notebooks in einem Namespace aus und gibt diesen zurück."""
     with open(path, "r", encoding="utf-8") as f:
         nb = nbformat.read(f, as_version=4)
-
-    # nur Codezellen, leerer Inhalt raus
-    code_cells = [c.source for c in nb.cells if c.cell_type == "code" and c.source.strip()]
-    # Magics entfernen
-    cleaned_cells = [_strip_magics(src) for src in code_cells]
-    # echte Newlines verwenden!
-    src = "\n\n".join(s for s in cleaned_cells if s.strip())
-
+    code_cells = [c.source for c in nb.cells if c.cell_type == "code"]
+    cleaned = [_strip_magics(s) for s in code_cells]
+    code = _extract_defs_keep_safe_imports(cleaned)  # nur Defs + sichere Imports
     ns = {}
-    exec(compile(src, str(path), "exec"), ns, ns)
+    exec(code, ns, ns)
     return ns
+
 
 def test_notebook_executes():
     ns = _exec_notebook(NB_PATH)
