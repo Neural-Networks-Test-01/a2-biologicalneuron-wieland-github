@@ -5,9 +5,11 @@ import numpy as np
 import types
 import importlib
 from nbconvert.preprocessors import ExecutePreprocessor
+from pathlib import Path
 
 # Path to the student notebook
-NB_PATH = os.path.join(os.path.dirname(__file__), "..", "a2_BiologicalNeuron.ipynb")
+HERE = Path(__file__).resolve().parent
+NB_PATH = HERE / "a2_BiologicalNeuron.ipynb"
 
 def _exec_notebook(path):
     """Execute the notebook and return the global namespace dict used during execution."""
