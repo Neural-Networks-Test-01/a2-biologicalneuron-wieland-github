@@ -8,8 +8,9 @@ from nbconvert.preprocessors import ExecutePreprocessor
 from pathlib import Path
 
 # Path to the student notebook
-HERE = Path(__file__).resolve().parent
-NB_PATH = HERE / "a2_BiologicalNeuron.ipynb"
+HERE = Path(__file__).resolve().parent          # tests/week01
+ROOT = HERE.parents[1]                          # Projekt-Root
+NB_PATH = ROOT / "a2_BiologicalNeuron.ipynb"
 
 def _exec_notebook(path):
     """Execute the notebook and return the global namespace dict used during execution."""
